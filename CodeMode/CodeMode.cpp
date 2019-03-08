@@ -15,13 +15,18 @@ enum TILES
     WINDOW,
     BLUEBERRY_CRATE,
     ICE_CREAM_CRATE,
+    STRAWBERRY_CRATE,
+    CHOPPING_BOARD
 };
 
 enum ITEMS
 {
+    NONE,
     DISH,
     BLUEBERRIES,
-    ICE_CREAM
+    ICE_CREAM,
+    STRAWBERRIES,
+    CHOPPED_STRAWBERRIES
 };
 
 map<char, TILES> tileMap =
@@ -33,7 +38,9 @@ map<char, TILES> tileMap =
     {'I', ICE_CREAM_CRATE},
     {'#', TABLE},
     {'0', FLOOR},
-    {'1', FLOOR}
+    {'1', FLOOR},
+    {'S', STRAWBERRY_CRATE},
+    {'C', CHOPPING_BOARD}
 };
 
 map<string, ITEMS> itemMap =
@@ -41,6 +48,12 @@ map<string, ITEMS> itemMap =
     {"DISH", DISH},
     {"BLUEBERRIES", BLUEBERRIES},
     {"ICE_CREAM", ICE_CREAM}
+};
+
+struct Position
+{
+    int row;
+    int col;
 };
 
 struct Player
@@ -61,12 +74,6 @@ struct Customer
 {
     int points;
     vector<ITEMS> order;
-};
-
-struct Board
-{
-    array<array<TILES, 11>, 7> grid;
-    vector<Table> usedTables;
 };
 
 vector<ITEMS> stringSplit(const string& str, const string& delim)
@@ -104,9 +111,21 @@ vector<ITEMS> stringSplit(const string& str, const string& delim)
 
 int main()
 {
-    Board board;
+    array<array<TILES, 11>, 7> grid;
+    vector<Table> usedTables;
+    Position dishwasher;
+    Position window;
+    Position blueberryCrate;
+    Position iceCreamCrate;
     Player me, partner;
     vector<Customer> activeCustomers;
+
+    map<ITEMS, Position*> equipmentMap =
+    {
+        {DISH, &dishwasher},
+        {BLUEBERRIES, &blueberryCrate},
+        {ICE_CREAM, &iceCreamCrate}
+    };
 
     int numAllCustomers;
     cin >> numAllCustomers; cin.ignore();
@@ -120,8 +139,28 @@ int main()
         getline(cin, kitchenLine);
         for (int j = 0; j < kitchenLine.size(); ++j)
         {
-            cerr << kitchenLine.at(j) << endl;
-            board.grid.at(i).at(j) = tileMap.at(kitchenLine.at(j));
+            auto tile = tileMap.at(kitchenLine.at(j));
+            grid.at(i).at(j) = tile;
+            if (tile == DISHWASHER)
+            {
+                dishwasher.row = i;
+                dishwasher.col = j;
+            }
+            else if (tile == WINDOW)
+            {
+                window.row = i;
+                window.col = j;
+            }
+            else if (tile == BLUEBERRY_CRATE)
+            {
+                blueberryCrate.row = i;
+                blueberryCrate.col = j;
+            }
+            else if (tile == ICE_CREAM_CRATE)
+            {
+                iceCreamCrate.row = i;
+                iceCreamCrate.col = j;
+            }
         }
     }
 
@@ -151,17 +190,17 @@ int main()
 
         int numTablesWithItems; // the number of tables in the kitchen that currently hold an item
         cin >> numTablesWithItems; cin.ignore();
-        board.usedTables.clear();
+        usedTables.clear();
         for (int i = 0; i < numTablesWithItems; i++) {
             int tableX;
             int tableY;
             string item;
             cin >> tableX >> tableY >> item; cin.ignore();
 
-            board.usedTables.emplace_back();
-            board.usedTables.back().row = tableY;
-            board.usedTables.back().col = tableX;
-            board.usedTables.back().carrying = stringSplit(item, "-");
+            usedTables.emplace_back();
+            usedTables.back().row = tableY;
+            usedTables.back().col = tableX;
+            usedTables.back().carrying = stringSplit(item, "-");
         }
         string ovenContents; // ignore until wood 1 league
         int ovenTimer;
@@ -181,10 +220,56 @@ int main()
             activeCustomers.back().order = stringSplit(customerItem, "-");
         }
 
+        // Start basic
+        // Create the last active recipe
+        auto& order = activeCustomers.back().order;
 
-        // MOVE x y
-        // USE x y
-        // WAIT
-        cout << "WAIT" << endl;
+        // See what item I need next
+        int orderIndex = 0;
+        ITEMS nextItem = NONE;
+        bool restart = false;
+
+        while (orderIndex < order.size())
+        {
+            auto item = order[orderIndex];
+            if (me.carrying.size() > orderIndex)
+            {
+                // I don't need to pick up this item
+                // I either need the next item, or I need to start over
+                if (me.carrying[orderIndex] == item)
+                {
+                    // Move to next
+                    ++orderIndex;
+                }
+                else
+                {
+                    restart = true;
+                    break;
+                }
+            }
+            else
+            {
+                nextItem = item;
+                break;
+            }
+        }
+
+        // If I need to restart, use the dishwasher to clear the plate
+        if (restart)
+        {
+            cout << "USE " << dishwasher.col << " " << dishwasher.row << endl;
+            continue;
+        }
+
+        // If the next item is NONE, the dish is complete
+        if (nextItem == NONE)
+        {
+            cout << "USE " << window.col << " " << window.row << endl;
+            continue;
+        }
+
+        // Get the next required item
+        Position* pos = equipmentMap.at(nextItem);
+        cout << "USE " << pos->col << " " << pos->row << endl;
     }
 }
